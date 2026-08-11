@@ -1335,6 +1335,117 @@ body {
     .new-events-btn{ padding: 8px 10px; }
   }
 
+  /* ============================================
+     LIVE FEATURE — toolbar button, pulsing badge,
+     and the "currently ongoing events" modal.
+     Live status is derived automatically from each
+     event's existing Start Date / End Date (today
+     falls within the range) — nothing new to store.
+     ============================================ */
+  .live-btn{
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border-radius: 999px;
+    border: 1.5px solid var(--red);
+    background: var(--red);
+    color: #fff;
+    font-family: var(--body, sans-serif);
+    font-weight: 700;
+    font-size: 13px;
+    letter-spacing: .3px;
+    cursor: pointer;
+    transition: background .18s ease, color .18s ease, transform .18s ease, box-shadow .18s ease;
+  }
+  .live-btn svg{ width: 14px; height: 14px; flex-shrink: 0; }
+  .live-btn:hover{ transform: translateY(-1px); box-shadow: 0 6px 16px -6px rgba(179,19,26,0.55); }
+  .live-btn:active{ transform: translateY(0); }
+  .live-btn.no-live{ background:#FAF7F2; color:var(--red); }
+  .live-btn.no-live:hover{ background:var(--red); color:#fff; }
+  .live-btn.no-live .live-dot{ background:var(--red); animation:none; box-shadow:none; opacity:.55; }
+  .live-btn.no-live:hover .live-dot{ background:#fff; }
+  .live-btn-count{
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px;
+    background:#fff; color:var(--red); font-family: var(--mono, monospace);
+    font-size: 10.5px; font-weight: 800; line-height: 1;
+  }
+  @media (max-width: 640px){
+    .live-btn span:not(.live-btn-count):not(.live-dot){ display:none; }
+    .live-btn{ padding: 8px 10px; }
+  }
+
+  /* Small pulsing dot used inline (e.g. inside the LIVE button) */
+  .live-dot{
+    display:inline-block; width:8px; height:8px; border-radius:50%;
+    background:#fff; box-shadow:0 0 0 rgba(255,255,255,0.6);
+    animation: livePulseDot 1.4s ease-out infinite;
+  }
+  @keyframes livePulseDot{
+    0%{ box-shadow:0 0 0 0 rgba(255,255,255,0.7); }
+    70%{ box-shadow:0 0 0 7px rgba(255,255,255,0); }
+    100%{ box-shadow:0 0 0 0 rgba(255,255,255,0); }
+  }
+
+  /* The red pulsing "🔴 LIVE NOW" badge, usable on cards and on the
+     full event detail/poster view. */
+  .live-now-badge{
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 4px 10px 4px 8px; border-radius: 999px;
+    background: var(--red); color:#fff;
+    font-family: var(--display); font-size: 11px; letter-spacing: 1px;
+    text-transform: uppercase; line-height: 1;
+    box-shadow: 0 4px 14px -4px rgba(179,19,26,0.6);
+    animation: liveBadgeGlow 1.6s ease-in-out infinite;
+  }
+  .live-now-badge .live-dot{ background:#fff; width:7px; height:7px; }
+  @keyframes liveBadgeGlow{
+    0%, 100%{ box-shadow: 0 4px 14px -4px rgba(179,19,26,0.5); }
+    50%{ box-shadow: 0 4px 22px -2px rgba(179,19,26,0.95); }
+  }
+
+  .live-modal{ width:min(760px, 100%); }
+  .live-modal h3{ display:flex; align-items:center; gap:10px; }
+  .live-grid{
+    display:grid; grid-template-columns:repeat(auto-fill, minmax(210px, 1fr));
+    gap:16px; margin-top:14px;
+  }
+  .live-card{
+    position:relative; border-radius:var(--radius-sm); overflow:hidden;
+    background:#111; cursor:pointer; aspect-ratio:4/5;
+    border:1.5px solid var(--line-strong);
+    transition: transform .16s var(--ease), box-shadow .16s var(--ease);
+  }
+  .live-card:hover{ transform:translateY(-3px); box-shadow:var(--shadow-lift); }
+  .live-card .poster-v2-photo{
+    position:absolute; inset:0; width:100%; height:100%;
+    background-size:cover; background-position:center;
+  }
+  .live-card::after{
+    content:""; position:absolute; inset:0;
+    background:linear-gradient(180deg, rgba(0,0,0,0) 35%, rgba(0,0,0,0.85) 100%);
+  }
+  .live-card-badge{ position:absolute; top:10px; left:10px; z-index:2; }
+  .live-card-info{
+    position:absolute; left:0; right:0; bottom:0; z-index:2;
+    padding:12px; color:#fff;
+  }
+  .live-card-title{ font-family:var(--display); font-size:15px; line-height:1.15; margin-bottom:4px; }
+  .live-card-meta{ font-family:var(--mono); font-size:10.5px; opacity:.85; text-transform:uppercase; letter-spacing:.5px; }
+  .live-empty-note{
+    margin-top:16px; padding:18px; text-align:center; color:#7a5a5a;
+    border:1.5px dashed var(--line-strong); border-radius:var(--radius-sm); font-size:13.5px;
+  }
+  @media (max-width: 480px){
+    .live-grid{ grid-template-columns:repeat(auto-fill, minmax(140px, 1fr)); gap:10px; }
+    .live-card-title{ font-size:13px; }
+  }
+
+  /* LIVE NOW badge shown inline on the full poster/detail view */
+  .poster-v2-live-badge{ margin-left:4px; }
+
   /* ---------- Login Auto Pop-up Modal ---------- */
   .new-event-popup{
     position: relative;
@@ -1645,6 +1756,22 @@ body {
     <button class="modal-close" data-close="choiceOverlay">&times;</button>
     <h3 id="choiceDateLabel">Events</h3>
     <div id="choiceList"></div>
+  </div>
+</div>
+
+<!-- ============================================
+     LIVE FEATURE — modal listing only the events
+     that are currently ongoing right now (today's
+     date falls within the event's Start/End Date).
+     Each card shows the event's wallpaper as the
+     main display plus a red pulsing LIVE NOW badge.
+     ============================================ -->
+<div class="overlay" id="liveOverlay">
+  <div class="choice-modal live-modal">
+    <button class="modal-close" data-close="liveOverlay">&times;</button>
+    <h3><span class="live-now-badge"><span class="live-dot"></span>LIVE NOW</span></h3>
+    <div id="liveGrid" class="live-grid"></div>
+    <div id="liveEmptyNote" class="live-empty-note" style="display:none;">No events are live right now. Check back during an event's scheduled dates.</div>
   </div>
 </div>
 
@@ -2227,6 +2354,14 @@ function renderViewOnlyModal(){
     return `${startLabel} – ${endLabel}`;
   }
   function eventsOn(key){ return events.filter(e => eventIncludesDate(e, key)); }
+  /*
+   * LIVE FEATURE — automatic detection helpers.
+   * An event is "live" purely based on today's date falling within its
+   * existing startDate/endDate range (inclusive) — no new field needed.
+   */
+  function todayDateKey(){ const tp = getTodayParts(); return dateKey(tp.y, tp.m, tp.d); }
+  function isEventLive(ev){ return eventIncludesDate(ev, todayDateKey()); }
+  function getLiveEvents(){ return events.filter(isEventLive); }
   function isAdminRole(role){ return role === "admin" || role === "headadmin"; }
   function escapeHtml(str){
     return String(str ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
@@ -2276,6 +2411,23 @@ countPill.title = "Click to see events by year";
 countPill.innerHTML = `${CAL_ICON}<span>${events.length}</span>`;
 countPill.onclick = openYearOverview;
 headerRight.appendChild(countPill);
+
+    /* ---- LIVE FEATURE: toolbar button ----
+       Shown to everyone (not just logged-in users), since "live" is
+       just today's date compared against each event's existing
+       Start/End Date — no account-specific state involved. The count
+       and pulsing state are recomputed fresh on every header render. */
+    {
+      const liveCount = getLiveEvents().length;
+      const liveBtn = document.createElement("button");
+      liveBtn.type = "button";
+      liveBtn.id = "liveBtn";
+      liveBtn.className = "live-btn" + (liveCount === 0 ? " no-live" : "");
+      liveBtn.title = liveCount ? "See what's live right now" : "No events are live right now";
+      liveBtn.innerHTML = `<span class="live-dot"></span><span>LIVE</span><span class="live-btn-count">${liveCount}</span>`;
+      liveBtn.onclick = openLiveModal;
+      headerRight.appendChild(liveBtn);
+    }
 
     /* ---- NEW EVENTS FEATURE: toolbar button + counter badge ----
        Only shown while logged in, since "viewed" tracking is per
@@ -2967,6 +3119,7 @@ const USER_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" str
         <div class="poster-v2-content">
           <div class="poster-v2-badge-row">
             <span class="poster-v2-badge">${CAT_LABEL[ev.category] || "Event"}</span>
+            ${isEventLive(ev) ? `<span class="live-now-badge poster-v2-live-badge"><span class="live-dot"></span>LIVE NOW</span>` : ""}
             ${(typeof EventViewersFeature !== "undefined") ? EventViewersFeature.badgeHtml(ev.id) : ""}
           </div>
           <h2 class="poster-v2-title">${escapeHtml(titleRest)}<span class="accent">${escapeHtml(lastWord)}</span></h2>
@@ -3224,6 +3377,46 @@ function openYearOverview(){
       list.appendChild(item);
     });
     openOverlay("choiceOverlay");
+  }
+
+  /* ============================================
+     LIVE FEATURE — builds the "currently ongoing
+     events" modal. Live status is recomputed fresh
+     every time the LIVE button is clicked, so it is
+     always in sync with each event's Start/End Date.
+     ============================================ */
+  function openLiveModal(){
+    const grid = document.getElementById("liveGrid");
+    const emptyNote = document.getElementById("liveEmptyNote");
+    grid.innerHTML = "";
+
+    const liveEvents = getLiveEvents();
+
+    if(!liveEvents.length){
+      grid.style.display = "none";
+      emptyNote.style.display = "block";
+    } else {
+      grid.style.display = "grid";
+      emptyNote.style.display = "none";
+
+      liveEvents.forEach(ev => {
+        const card = document.createElement("div");
+        card.className = "live-card";
+        card.dataset.eventId = ev.id;
+        card.innerHTML = `
+          <div class="poster-v2-photo"></div>
+          <div class="live-card-badge live-now-badge"><span class="live-dot"></span>LIVE NOW</div>
+          <div class="live-card-info">
+            <div class="live-card-title">${escapeHtml(ev.title)}</div>
+            <div class="live-card-meta">${escapeHtml(CAT_LABEL[ev.category] || "Event")} &middot; ${escapeHtml(ev.time || "Ongoing today")}</div>
+          </div>
+        `;
+        card.onclick = () => { closeOverlay("liveOverlay"); activeEvent = ev; renderAll(); };
+        grid.appendChild(card);
+      });
+    }
+
+    openOverlay("liveOverlay");
   }
 
   /* ================= ADD / EDIT EVENT FORM ================= */
