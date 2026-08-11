@@ -2958,6 +2958,16 @@ content.querySelector("#edgeNextYear").onclick = () => {
     const CLOCK_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></svg>`;
     const PIN_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>`;
 const USER_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>`;
+    const EYE_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>`;
+    // "Seen by" — list of usernames who have viewed this event (synced via
+    // Firestore's viewedBy array), shown so admins/staff can see at a glance
+    // who has already checked the event.
+    const viewedByNames = Array.isArray(ev.viewedBy) ? [...new Set(ev.viewedBy)] : [];
+    const seenByLabel = viewedByNames.length
+      ? (viewedByNames.length > 4
+          ? `${viewedByNames.slice(0, 4).join(", ")} +${viewedByNames.length - 4} more`
+          : viewedByNames.join(", "))
+      : "No one yet";
     // hinahati ang title sa dalawang linya para ma-highlight sa red yung
     // huling salita, gaya ng "SALE!" sa sample design
     const titleWords = ev.title.trim().split(/\s+/);
@@ -2992,6 +3002,10 @@ const USER_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" str
             <div class="poster-v2-fact">
               <span class="ic">${USER_SVG}</span>
               <div><div class="label">BY</div><div class="value">${escapeHtml(ev.createdBy || "Store Team")}</div></div>
+            </div>
+            <div class="poster-v2-fact">
+              <span class="ic">${EYE_SVG}</span>
+              <div><div class="label">SEEN BY</div><div class="value">${escapeHtml(seenByLabel)}</div></div>
             </div>
           </div>
           <div class="poster-v2-footer"></div>
@@ -3702,6 +3716,20 @@ const NewEventsFeature = (function () {
   }
 
   /**
+   * Persists "this username has seen this event" to Firestore so that
+   * everyone (not just the viewer's own browser) can see who has viewed
+   * each event — powers the "SEEN BY" list on the event poster.
+   * Safe no-op when offline / Firebase isn't configured.
+   */
+  function markViewedRemote(username, id) {
+    if (!username || !id) return;
+    if (typeof eventsCol === "undefined" || !eventsCol) return;
+    eventsCol.doc(id).update({
+      viewedBy: firebase.firestore.FieldValue.arrayUnion(username)
+    }).catch(err => console.error("Failed to record event view:", err));
+  }
+
+  /**
    * Whether the current logged-in user has already viewed this specific
    * event. Used by the calendar grid (and mini calendar) to color each
    * date's event bar/indicator Red (unviewed) or Blue (viewed). When
@@ -3890,6 +3918,7 @@ nepDescEl.classList.toggle("desc-viewed", ev.viewedNow);
   const ev = sessionQueue[queueIndex];
 
   markIdAsViewed(session.username, ev.id);
+  markViewedRemote(session.username, ev.id);
   ev.viewedNow = true;
 
   // Live color flip sa modal bago mag-close
@@ -3913,6 +3942,7 @@ nepDescEl.classList.toggle("desc-viewed", ev.viewedNow);
 function markViewedLive(id, descEl){
   if(!session) return;
   markIdAsViewed(session.username, id);
+  markViewedRemote(session.username, id);
 
   // Live color flip sa poster description
   if(descEl){
