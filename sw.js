@@ -3,7 +3,7 @@
 // instantly even on a weak connection. Firebase calls always go to the
 // network directly (live event data should never be served from cache).
 
-const CACHE_NAME = "landmark-calendar-v1";
+const CACHE_NAME = "landmark-calendar-v2";
 const APP_SHELL = [
   "./",
   "./index.html",
