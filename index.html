@@ -4,6 +4,19 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>LANDMARK — Store Event Calendar</title>
+
+<!-- ===== PWA: installable app setup ===== -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#B3131A">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Landmark">
+<meta name="mobile-web-app-capable" content="yes">
+<!-- ===== end PWA setup ===== -->
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Anton&family=Work+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&family=Playfair+Display:ital,wght@0,700;0,900;1,900&display=swap" rel="stylesheet">
 <style>
@@ -4444,6 +4457,18 @@ renderAll();
       subtree: true
     });
   })();
+</script>
+<script>
+  // ===== PWA: register service worker so the app can be installed and =====
+  // ===== keeps working (loads the app shell) when offline/on a flaky  =====
+  // ===== connection. Live event data still needs internet (Firebase). =====
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("sw.js").catch((err) => {
+        console.warn("Service worker registration failed:", err);
+      });
+    });
+  }
 </script>
 </body>
 </html>
