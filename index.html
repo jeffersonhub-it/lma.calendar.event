@@ -1266,6 +1266,18 @@ body {
   }
   .log-filter-btn.active{opacity:1; background:var(--ink); color:var(--paper-soft); border-color:var(--ink);}
 
+  /* ---- Currently Online Users (Head Admin only) ---- */
+  .online-user-item{
+    display:flex; justify-content:space-between; align-items:center; gap:10px;
+    padding:10px 12px; border:1px solid var(--line-strong); border-radius:var(--radius-sm); margin-bottom:8px;
+  }
+  .online-user-item .u{display:flex; align-items:center; gap:8px; font-weight:700;}
+  .online-user-item .r{font-family:var(--mono); font-size:10.5px; opacity:.55; font-weight:400; margin-left:6px;}
+  .online-dot{width:8px; height:8px; border-radius:50%; flex-shrink:0; background:#8a8a8a;}
+  .online-dot.on{background:#3D8B5F; box-shadow:0 0 0 3px rgba(61,139,95,0.18);}
+  .online-since{font-family:var(--mono); font-size:10px; opacity:.5; white-space:nowrap;}
+  .online-users-count{font-size:12px; opacity:.6; margin-bottom:12px;}
+
   .sync-banner{
     position:fixed; bottom:14px; right:14px; z-index:500;
     font-family:var(--mono); font-size:10.5px; letter-spacing:1px; text-transform:uppercase;
@@ -1919,6 +1931,15 @@ body {
   </div>
 </div>
 
+<!-- Head admin "Currently Online Users" modal -->
+<div class="overlay" id="onlineUsersOverlay">
+  <div class="roster-modal">
+    <button class="modal-close" data-close="onlineUsersOverlay">&times;</button>
+    <h3>Currently Online Users</h3>
+    <div id="onlineUsersList"></div>
+  </div>
+</div>
+
 <!-- Admin roster modal -->
 <div class="overlay" id="rosterOverlay">
   <div class="roster-modal">
@@ -2078,6 +2099,9 @@ function getRequestSource(u){
 
 // Shared log-out routine used by the manual "Log out" button
 function performLogout(){
+  const wasUsername = session ? session.username : null;
+  stopPresenceHeartbeat();
+  if(wasUsername) markUserPresence(wasUsername, session.role, false); // best-effort; fire-and-forget
   session = null;
   saveSession(null);
   document.getElementById("loadingScreen").classList.remove("hidden");
@@ -2092,6 +2116,8 @@ function completeLogin(user){
   closeOverlay("accountOverlay");
   closeOverlay("viewOnlyOverlay");
   logActivity("login", `Logged in as ${roleLabel(user.role)}`);
+  markUserPresence(user.username, user.role, true);
+  startPresenceHeartbeat();
   renderAll();
 
   // NEW EVENTS FEATURE: recompute the unviewed queue for this account so
@@ -2285,6 +2311,74 @@ function renderViewOnlyModal(){
       if(el) el.textContent = "User: " + count;
     }, () => {});
   }
+
+  /* ================= CURRENTLY ONLINE USERS (Head Admin only) =================
+   * Separate from the anonymous tab-counter above: this tracks LOGGED-IN
+   * accounts by username in the same `presence` collection, using a doc id
+   * of the lowercased username (one doc per account, not per tab). Fields:
+   *   { username, role, online: true/false, lastSeen: <ms epoch> }
+   * "online" is what we last told Firestore; "lastSeen" is the heartbeat
+   * clock. A user only counts as ONLINE in the UI if online === true AND
+   * lastSeen is fresher than PRESENCE_STALE_MS — that way if a tab is
+   * killed before it can write "online:false" (crash, force-quit, network
+   * loss) the entry still self-corrects to offline once the heartbeat goes
+   * stale, without any extra cleanup job.
+   */
+  const PRESENCE_HEARTBEAT_MS = 20000; // how often a logged-in tab "checks in"
+  const PRESENCE_STALE_MS = 45000;     // no heartbeat within this window = treat as offline
+  let onlineUsersLive = [];            // [{username, role, online, lastSeen}] — synced live from Firestore
+  let presenceHeartbeatTimer = null;
+
+  function presenceDocId(username){ return String(username || "").toLowerCase(); }
+
+  // Best-effort writes: presence is a "nice to have" live indicator, so a
+  // failed write (offline, permissions, etc.) should never block login/logout.
+  async function markUserPresence(username, role, online){
+    if(!presenceCol || !username) return;
+    try{
+      await presenceCol.doc(presenceDocId(username)).set({
+        username, role: role || "", online: !!online, lastSeen: Date.now()
+      }, { merge: true });
+    } catch(err){ console.error("Presence update failed:", err); }
+  }
+
+  function startPresenceHeartbeat(){
+    stopPresenceHeartbeat();
+    if(!session) return;
+    presenceHeartbeatTimer = setInterval(() => {
+      if(!session) { stopPresenceHeartbeat(); return; }
+      markUserPresence(session.username, session.role, true);
+    }, PRESENCE_HEARTBEAT_MS);
+  }
+  function stopPresenceHeartbeat(){
+    if(presenceHeartbeatTimer){ clearInterval(presenceHeartbeatTimer); presenceHeartbeatTimer = null; }
+  }
+
+  // A presence doc is only "really" online if it recently heartbeated —
+  // this is what makes stale users automatically drop to offline in the UI.
+  function isPresenceFresh(u){
+    return !!u.online && (Date.now() - (u.lastSeen || 0)) < PRESENCE_STALE_MS;
+  }
+
+  if(presenceCol){
+    presenceCol.onSnapshot(snap => {
+      const list = [];
+      snap.forEach(d => {
+        const v = d.data();
+        if(v && v.username) list.push({ username: v.username, role: v.role || "", online: !!v.online, lastSeen: v.lastSeen || 0 });
+      });
+      onlineUsersLive = list;
+      const overlay = document.getElementById("onlineUsersOverlay");
+      if(overlay && overlay.classList.contains("visible")) renderOnlineUsers();
+    }, () => {});
+    // Re-render periodically so a stale (crashed/closed-without-cleanup) user
+    // visibly flips to "offline" even without a new Firestore write coming in.
+    setInterval(() => {
+      const overlay = document.getElementById("onlineUsersOverlay");
+      if(overlay && overlay.classList.contains("visible")) renderOnlineUsers();
+    }, 10000);
+  }
+
   let activeEvent = null; // set -> detail mode, null -> browse mode
 
  const today = new Date();
@@ -2597,6 +2691,7 @@ headerRight.appendChild(countPill);
         <div class="account-actions">
           ${canManage ? '<button class="btn primary block" id="addEventBtn">+ Add Event</button>' : '<div class="hint">View Only accounts can browse the calendar but cannot add, edit, or delete events.</div>'}
           ${session.role === "headadmin" ? '<button class="btn gold block" id="rosterBtn">View Admin Roster</button>' : ""}
+          ${session.role === "headadmin" ? '<button class="btn block" id="onlineUsersBtn">Currently Online Users</button>' : ""}
           ${session.role === "headadmin" ? '<button class="btn block" id="activityLogBtn">Activity Log</button>' : ""}
           <button class="btn block" data-close="accountOverlay">Close</button>
         </div>
@@ -2606,6 +2701,7 @@ headerRight.appendChild(countPill);
       }
       if(session.role === "headadmin"){
         body.querySelector("#rosterBtn").onclick = () => { closeOverlay("accountOverlay"); openRoster(); };
+        body.querySelector("#onlineUsersBtn").onclick = () => { closeOverlay("accountOverlay"); openOnlineUsers(); };
         body.querySelector("#activityLogBtn").onclick = () => { closeOverlay("accountOverlay"); openActivityLog(); };
       }
       body.querySelectorAll("[data-close]").forEach(b =>
@@ -3690,6 +3786,50 @@ function openYearOverview(){
     openOverlay("rosterOverlay");
   }
 
+  /* ================= HEAD ADMIN: CURRENTLY ONLINE USERS =================
+   * Deliberately separate from the Activity Log below — this shows LIVE
+   * presence only (who is online right now), not a history of past events. */
+  function formatLastSeen(ms){
+    if(!ms) return "";
+    const diff = Date.now() - ms;
+    if(diff < 15000) return "just now";
+    if(diff < 60000) return Math.round(diff/1000) + "s ago";
+    if(diff < 3600000) return Math.round(diff/60000) + "m ago";
+    return new Date(ms).toLocaleTimeString(undefined, { hour:"numeric", minute:"2-digit" });
+  }
+
+  function openOnlineUsers(){
+    renderOnlineUsers();
+    openOverlay("onlineUsersOverlay");
+  }
+
+  function renderOnlineUsers(){
+    const list = document.getElementById("onlineUsersList");
+    if(!list) return;
+    const sorted = onlineUsersLive.slice().sort((a,b) => {
+      const aOn = isPresenceFresh(a), bOn = isPresenceFresh(b);
+      if(aOn !== bOn) return aOn ? -1 : 1;
+      return a.username.localeCompare(b.username);
+    });
+    const onlineCount = sorted.filter(isPresenceFresh).length;
+    const countHtml = `<div class="online-users-count">${onlineCount} user${onlineCount === 1 ? "" : "s"} online now</div>`;
+
+    let bodyHtml;
+    if(!sorted.length){
+      bodyHtml = `<div class="empty-note">No presence data yet.</div>`;
+    } else {
+      bodyHtml = sorted.map(u => {
+        const fresh = isPresenceFresh(u);
+        return `
+        <div class="online-user-item">
+          <div class="u"><span class="online-dot${fresh ? " on" : ""}"></span>${escapeHtml(u.username)}<span class="r">${escapeHtml(roleLabel(u.role))}</span></div>
+          <div class="online-since">${fresh ? "Online" : "Last seen " + formatLastSeen(u.lastSeen)}</div>
+        </div>`;
+      }).join("");
+    }
+    list.innerHTML = countHtml + bodyHtml;
+  }
+
   /* ================= HEAD ADMIN: ACTIVITY LOG ================= */
   let activityLogFilter = "all"; // "all" | "login" | "add" | "edit" | "delete" | "approve" | "reject"
   const LOG_TYPE_LABEL = { login: "Logged in", add: "Added event", edit: "Edited event", delete: "Deleted event", approve: "Approved account", reject: "Rejected account" };
@@ -4426,6 +4566,67 @@ renderAll();
 } else {
     console.log("Skipping Firebase setup - offline mode");
 }
+
+  // A page reload/first load with an existing localStorage session (user was
+  // already logged in) never goes through completeLogin(), so start their
+  // presence heartbeat here too.
+  if(session){
+    markUserPresence(session.username, session.role, true);
+    startPresenceHeartbeat();
+  }
+
+  /* ================= BACK/FORWARD + BFCACHE PRESENCE HANDLING =================
+   * Goal:
+   *  - Switching tabs or minimizing the browser must NEVER log the user out
+   *    or mark them offline (no visibilitychange handling here on purpose).
+   *  - Leaving the app entirely (Back/Forward navigating away, closing the
+   *    tab, or navigating to another site) should mark presence offline and,
+   *    once it's clear the page is truly gone (not just cached), clear the
+   *    local session too.
+   *  - Returning via Forward/Back into a BFCache-restored copy of this page
+   *    (pageshow with event.persisted === true) should resume presence as
+   *    online and restart the heartbeat, since setInterval timers do not
+   *    keep running while a page sits frozen in the BFCache.
+   *
+   * pagehide fires whenever the page is being hidden due to navigation
+   * (Back/Forward, closing the tab, going to another URL) — but critically
+   * NOT for tab switches or minimizing. event.persisted tells us whether the
+   * browser is keeping the page frozen in BFCache (true) or fully discarding
+   * it (false).
+   */
+  window.addEventListener("pagehide", (e) => {
+    if(!session) return;
+    // Always attempt to flip presence offline — best effort; if the browser
+    // discards the page before this completes, the heartbeat staleness
+    // window (PRESENCE_STALE_MS) still self-corrects it to offline.
+    markUserPresence(session.username, session.role, false);
+    stopPresenceHeartbeat();
+    if(!e.persisted){
+      // Page is being fully torn down (true unload) — not coming back via
+      // BFCache — so clear the session now. If the user later returns
+      // (fresh navigation/new load), they'll see the login screen.
+      saveSession(null);
+    }
+    // If e.persisted is true, we deliberately leave the localStorage session
+    // intact: the in-memory `session` variable and the whole DOM/JS state
+    // are frozen as-is by the browser and will resume exactly as they were
+    // if the user comes back via Forward — logging them out here would be
+    // wrong since nothing about their session actually ended.
+  });
+
+  window.addEventListener("pageshow", (e) => {
+    if(!e.persisted) return; // normal (non-BFCache) load — nothing to resume
+    // Page was restored from BFCache (e.g. user hit Forward/Back to return).
+    // Re-sync in case another tab logged out while this one was frozen.
+    const stored = loadSession();
+    if(!stored){
+      if(session){ session = null; renderAll(); }
+      return;
+    }
+    session = stored;
+    markUserPresence(session.username, session.role, true);
+    startPresenceHeartbeat();
+  });
 })();
 </script>
 <script>
