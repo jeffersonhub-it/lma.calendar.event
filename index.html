@@ -2291,39 +2291,25 @@ function renderViewOnlyModal(){
     return users.filter(u => u.role !== "headadmin").length;
   }
 
-  // ---- Lightweight realtime "online" count via Firestore presence heartbeat ----
+  // Presence collection: powers BOTH the "User: N" counter on the homepage
+  // AND the Head-Admin-only "Currently Online Users" list inside the app.
+  // Both read from the same named-account presence docs below, so the two
+  // numbers always match — there's no separate anonymous/per-tab counter.
   const presenceCol = (typeof firebaseReady !== "undefined" && firebaseReady && typeof db !== "undefined") ? db.collection("presence") : null;
-  const ONLINE_WINDOW_MS = 45000;
-  let presenceId = sessionStorage.getItem("landmark_presence_id");
-  if(!presenceId){
-    presenceId = "p" + Date.now().toString(36) + Math.random().toString(36).slice(2,8);
-    sessionStorage.setItem("landmark_presence_id", presenceId);
-  }
-  if(presenceCol){
-    const beat = () => presenceCol.doc(presenceId).set({ lastSeen: Date.now() }).catch(()=>{});
-    beat();
-    setInterval(beat, 20000);
-    window.addEventListener("beforeunload", () => { presenceCol.doc(presenceId).delete().catch(()=>{}); });
-    presenceCol.onSnapshot(snap => {
-      const now = Date.now();
-      let count = 0;
-      snap.forEach(d => { const v = d.data(); if(v && v.lastSeen && (now - v.lastSeen) < ONLINE_WINDOW_MS) count++; });
-      const el = document.getElementById("loadingOnlineCount");
-      if(el) el.textContent = "User: " + count;
-    }, () => {});
-  }
 
   /* ================= CURRENTLY ONLINE USERS (Head Admin only) =================
-   * Separate from the anonymous tab-counter above: this tracks LOGGED-IN
-   * accounts by username in the same `presence` collection, using a doc id
-   * of the lowercased username (one doc per account, not per tab). Fields:
+   * This tracks LOGGED-IN accounts by username in the `presence` collection,
+   * using a doc id of the lowercased username (one doc per account, not per
+   * tab/visitor — logged-out visitors are not tracked at all). Fields:
    *   { username, role, online: true/false, lastSeen: <ms epoch> }
    * "online" is what we last told Firestore; "lastSeen" is the heartbeat
    * clock. A user only counts as ONLINE in the UI if online === true AND
    * lastSeen is fresher than PRESENCE_STALE_MS — that way if a tab is
    * killed before it can write "online:false" (crash, force-quit, network
    * loss) the entry still self-corrects to offline once the heartbeat goes
-   * stale, without any extra cleanup job.
+   * stale, without any extra cleanup job. The homepage "User: N" counter
+   * (updateHomepageOnlineCount below) reads this exact same list, so it
+   * always agrees with what the Head Admin sees inside.
    */
   const PRESENCE_HEARTBEAT_MS = 20000; // how often a logged-in tab "checks in"
   const PRESENCE_STALE_MS = 45000;     // no heartbeat within this window = treat as offline
@@ -2369,15 +2355,27 @@ function renderViewOnlyModal(){
         if(v && v.username) list.push({ username: v.username, role: v.role || "", online: !!v.online, lastSeen: v.lastSeen || 0 });
       });
       onlineUsersLive = list;
+      updateHomepageOnlineCount();
       const overlay = document.getElementById("onlineUsersOverlay");
       if(overlay && overlay.classList.contains("visible")) renderOnlineUsers();
     }, () => {});
     // Re-render periodically so a stale (crashed/closed-without-cleanup) user
-    // visibly flips to "offline" even without a new Firestore write coming in.
+    // visibly flips to "offline" even without a new Firestore write coming in —
+    // this keeps both the homepage count and the inside list in sync over time.
     setInterval(() => {
+      updateHomepageOnlineCount();
       const overlay = document.getElementById("onlineUsersOverlay");
       if(overlay && overlay.classList.contains("visible")) renderOnlineUsers();
     }, 10000);
+  }
+
+  // Same source of truth as the Head Admin's "Currently Online Users" list —
+  // counts real logged-in accounts with a fresh heartbeat, nothing anonymous.
+  function updateHomepageOnlineCount(){
+    const el = document.getElementById("loadingOnlineCount");
+    if(!el) return;
+    const count = onlineUsersLive.filter(isPresenceFresh).length;
+    el.textContent = "User: " + count;
   }
 
   let activeEvent = null; // set -> detail mode, null -> browse mode
